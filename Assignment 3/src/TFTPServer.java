@@ -182,13 +182,12 @@ public class TFTPServer
 			//byte[] buffer = new byte[databuffer.length+4];
 			
 
-			int block = 0, tot = databuffer.length;
+			int block = 1, tot = databuffer.length, length = 512, packetcount = tot/512;
+			if(packetcount == 0) packetcount = 1;
 			
-			int packetcount = tot/512;
-			int length = 512;
 			while(packetcount > 0){
 				if(length * (block+1) > tot) { // the last packet
-					length = length*block - tot; // 2560 > 2557 = 3
+					length = tot-length*block; // 2560 > 2557 = 3
 				}
 				
 				byte[] buffer = new byte[length+4];
@@ -207,12 +206,9 @@ public class TFTPServer
 				buffer[2] = (byte) t.charAt(0); // 0 
 				buffer[3] = (byte) t.charAt(1); // 5
 				
+				System.out.printf("\tsend [%d] dataLength: %d\n", block, length);
 				
-				String temp = new String(buffer);
-				System.out.printf("block [%d] - %s", block, temp);
-				
-				
-				DatagramPacket data = new DatagramPacket(buffer, length);
+				DatagramPacket data = new DatagramPacket(buffer, buffer.length);
 				socket.send(data);
 				block++;
 				packetcount--;
@@ -222,6 +218,7 @@ public class TFTPServer
 			return true;
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
+			e.printStackTrace();
 			return false;
 		}
 	}
