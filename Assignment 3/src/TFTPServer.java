@@ -4,6 +4,7 @@ import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -91,7 +92,7 @@ public class TFTPServer
 						}
 						sendSocket.close();
 					} 
-					catch (SocketException e) 
+					catch (Exception e) 
 						{e.printStackTrace();}
 				}
 			}.start();
@@ -149,14 +150,32 @@ public class TFTPServer
 	 * @param sendSocket (socket used to send/receive packets)
 	 * @param requestedFile (name of file to read/write)
 	 * @param opcode (RRQ or WRQ)
+	 * @throws IOException 
 	 */
 	
-	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) 
+	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) throws IOException 
 	{		
 		if(opcode == OP_RRQ)
 		{
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
-			boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
+			byte[] databuffer = Files.readAllBytes(Paths.get(requestedFile)); // read in data from file
+			
+			int block = 1, count = databuffer.length/512, error = 0;
+			byte[] buffer = getSendData(block, databuffer); // initial buffer
+			
+			while(block <= count+1) {
+				if(error > 3) { // max errors of 3 in this case
+					System.out.println("Too many errors (send a error back!)");
+					break;
+				}
+				
+				if(send_DATA_receive_ACK(sendSocket, 1000, buffer)) {
+					block++;
+					buffer = getSendData(block, databuffer); // don't re-create if fail
+				}
+				else error++;
+			}
+			
 		}
 		else if (opcode == OP_WRQ) 
 		{
@@ -175,50 +194,45 @@ public class TFTPServer
 	To be implemented
 	*/
 	
-	private boolean send_DATA_receive_ACK(DatagramSocket socket, String path) {
-		try {
-			byte[] databuffer = Files.readAllBytes(Paths.get(path)); // read in data from file
-			
-			//byte[] buffer = new byte[databuffer.length+4];
-			
+	private byte[] getSendData(int block, byte[] data){
+		int length = 512; //initial value
+		if(length * block > data.length) { // when the offset is larger then actual bytes left the read
+			length = data.length-length*(block-1); // then we only read whats left
+		}
 
-			int block = 1, tot = databuffer.length, length = 512, packetcount = tot/512;
-			if(packetcount == 0) packetcount = 1;
-			
-			while(packetcount > 0){
-				if(length * (block+1) > tot) { // the last packet
-					length = tot-length*block; // 2560 > 2557 = 3
-				}
-				
-				byte[] buffer = new byte[length+4];
-				buffer[0] = 0;
-				buffer[1] = 3; //Opcode
-				
-				for(int i = 0; i < length; i++){ // not the most elegant way..
-
-					buffer[i+4] = databuffer[i+block*512]; // read bytes from offset
-				}
-				
-				// block = 5
-				String t = block+"";
-				if(block < 10) t = "0"+block;
-				
-				buffer[2] = (byte) t.charAt(0); // 0 
-				buffer[3] = (byte) t.charAt(1); // 5
-				
-				System.out.printf("\tsend [%d] dataLength: %d\n", block, length);
-				
-				DatagramPacket data = new DatagramPacket(buffer, buffer.length);
-				socket.send(data);
-				block++;
-				packetcount--;
-			}
-
+		byte[] buffer = new byte[length+4]; // length of the data plus the 4 initial bytes (opcode+block)
 		
-			return true;
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		//opcode (pre-set)
+		buffer[0] = 0;
+		buffer[1] = 3;
+		//current block
+		buffer[2] = (byte)(block >= 255 ? block/255 : 0); // get the bits above 255
+		buffer[3] = (byte) (block); // block
+		
+		for(int i = 0; i < length; i++){ // not the most elegant way..
+			buffer[i+4] = data[i+(block-1)*512]; // read bytes from offset
+		}
+		
+		return buffer;
+	}
+	private boolean send_DATA_receive_ACK(DatagramSocket socket, int timeout, byte[] buffer){
+		DatagramPacket datagram = new DatagramPacket(buffer, buffer.length); // the datagram to be sent
+		try {
+			socket.send(datagram); // send the datagram
+			byte[] recive = new byte[BUFSIZE]; // the recive buffer 
+
+			socket.setSoTimeout(timeout); // the timeout limit
+			try {
+				socket.receive(new DatagramPacket(recive, recive.length)); // get the ACK packet
+				int opcode = ((recive[0] & 0xff << 8) | (recive[1] & 0xff)); // retrive the opcode
+				if(opcode == OP_ACK) return true; // hope for the best
+				else return false; // oh no.. it failed
+			}
+			catch (SocketTimeoutException te){ //oh shit.. the timeout for the recive expired
+				//timeout.. resend
+				return false;
+			}
+		} catch (IOException e) { // an internal error occured
 			return false;
 		}
 	}
