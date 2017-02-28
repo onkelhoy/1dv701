@@ -1,0 +1,7 @@
+# ignore every file in read and write
+read/*
+write/*
+
+# but keep the actual folder
+read/.gitkeep
+write/.gitkeep

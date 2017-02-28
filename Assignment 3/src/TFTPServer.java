@@ -1,4 +1,5 @@
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -164,6 +165,11 @@ public class TFTPServer
 	{		
 		if(opcode == OP_RRQ)
 		{
+			File f = new File(requestedFile);
+			if(!(f.exists() && f.isFile())) {
+				send_ERR(sendSocket, 1, "File not found.");
+				return;
+			}
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 			byte[] databuffer = Files.readAllBytes(Paths.get(requestedFile)); // read in data from file
 			
@@ -197,7 +203,7 @@ public class TFTPServer
 			ack = getHead(4, OP_ACK, ++block); // and get the new ACK
 			
 			while(!sendSocket.isClosed()){
-				if(error >= 3) {
+				if(error >= 3) { // maybe
 					System.out.println("error is more then 3");
 					break;
 				}
@@ -214,7 +220,7 @@ public class TFTPServer
 		{
 			System.err.println("Invalid request. Sending an error packet.");
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(sendSocket, requestedFile);
+			send_ERR(sendSocket, 4, "Illegal TFTP operation.");
 			return;
 		}		
 	}
@@ -297,9 +303,18 @@ public class TFTPServer
 		}
 	}
 	
-	private void send_ERR(DatagramSocket socket, String path)
+	private void send_ERR(DatagramSocket socket, int errorCode, String errorMessege) throws IOException
 	{
+		// 2bytes    2bytes      n bytes     1byte
+		// 05    |  ErrorCode |   ErrMsg   |   0  |  <- error header
 		
+		byte[] msg = errorMessege.getBytes(), buffer = getHead(5+msg.length, OP_ERR, errorCode);
+		
+		for(int i = 0; i < msg.length; i++){
+			buffer[i+4] = msg[i];
+		}
+		buffer[buffer.length-1] = 0;
+		socket.send(new DatagramPacket(buffer, buffer.length));
 	}
 	
 }
