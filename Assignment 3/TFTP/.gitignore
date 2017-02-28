@@ -3,5 +3,5 @@ read/*
 write/*
 
 # but keep the actual folder
-read/.gitkeep
-write/.gitkeep
+!read/.gitkeep
+!write/.gitkeep
