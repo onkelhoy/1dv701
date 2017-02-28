@@ -1,3 +1,5 @@
+import java.io.ByteArrayInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -5,8 +7,11 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 public class TFTPServer 
 {
@@ -135,10 +140,12 @@ public class TFTPServer
 		
 		int opcode = ((buf[0] & 0xff << 8) | (buf[1] & 0xff));
 		
-		int index = 2;
-		while((int)buf[index] > 0){
-			requestedFile.append((char)buf[index]);
-			index++;
+		if(opcode == 1 || opcode == 2) {
+			int index = 2;
+			while((int)buf[index] > 0){
+				requestedFile.append((char)buf[index]);
+				index++;
+			}
 		}
 		
 		return opcode;
@@ -171,7 +178,8 @@ public class TFTPServer
 				
 				if(send_DATA_receive_ACK(sendSocket, 1000, buffer)) {
 					block++;
-					buffer = getSendData(block, databuffer); // don't re-create if fail
+					error = 0;
+					if(block <= count+1) buffer = getSendData(block, databuffer); // don't re-create if fail
 				}
 				else error++;
 			}
@@ -179,7 +187,28 @@ public class TFTPServer
 		}
 		else if (opcode == OP_WRQ) 
 		{
-			boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
+			FileOutputStream writer = new FileOutputStream(requestedFile);
+			int block = 0, error = 0;
+			byte[] ack = getHead(4, OP_ACK, block);
+			
+			
+			//send the initial ACK [0]
+			sendSocket.send(new DatagramPacket(ack, ack.length));
+			ack = getHead(4, OP_ACK, ++block); // and get the new ACK
+			
+			while(!sendSocket.isClosed()){
+				if(error >= 3) {
+					System.out.println("error is more then 3");
+					break;
+				}
+				if(receive_DATA_send_ACK(sendSocket, ack, writer)) {
+					error = 0;
+					ack = getHead(4, OP_ACK, ++block);
+				}
+				else error++;
+			}
+			
+			writer.close();
 		}
 		else 
 		{
@@ -194,20 +223,14 @@ public class TFTPServer
 	To be implemented
 	*/
 	
+	// READ
 	private byte[] getSendData(int block, byte[] data){
 		int length = 512; //initial value
 		if(length * block > data.length) { // when the offset is larger then actual bytes left the read
 			length = data.length-length*(block-1); // then we only read whats left
 		}
-
-		byte[] buffer = new byte[length+4]; // length of the data plus the 4 initial bytes (opcode+block)
 		
-		//opcode (pre-set)
-		buffer[0] = 0;
-		buffer[1] = 3;
-		//current block
-		buffer[2] = (byte)(block >= 255 ? block/255 : 0); // get the bits above 255
-		buffer[3] = (byte) (block); // block
+		byte[] buffer = getHead(length+4, OP_DAT, block); // length of the data plus the 4 initial bytes (opcode+block)
 		
 		for(int i = 0; i < length; i++){ // not the most elegant way..
 			buffer[i+4] = data[i+(block-1)*512]; // read bytes from offset
@@ -237,8 +260,42 @@ public class TFTPServer
 		}
 	}
 	
-	private boolean receive_DATA_send_ACK(DatagramSocket socket, String path)
-	{return true;}
+	// WRITE
+	private byte[] getHead(int size, int OP, int block){
+		
+		ByteBuffer head = ByteBuffer.allocate(size); 
+		
+		head.putShort((short)OP);
+		head.putShort((short)block);
+		return head.array();
+	}
+	private boolean receive_DATA_send_ACK(DatagramSocket socket, byte[] ack, FileOutputStream writer)
+	{
+		try {		
+			// read in data
+			socket.setSoTimeout(6000); // timeout
+			byte[] buffer = new byte[512+4];
+			DatagramPacket datagram = new DatagramPacket(buffer, buffer.length);
+			socket.receive(datagram);
+			
+			// check opcode = 4
+			if(ParseRQ(buffer, new StringBuffer()) == OP_DAT) {
+
+				// send ACK
+				byte[] data = Arrays.copyOfRange(datagram.getData(), 4, datagram.getLength()); // the recived data
+				
+				writer.write(data);
+				writer.flush();
+				socket.send(new DatagramPacket(ack, ack.length));
+				if(data.length < 512) socket.close();
+				return true;
+			}
+			else return false;
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			return false;
+		}
+	}
 	
 	private void send_ERR(DatagramSocket socket, String path)
 	{
