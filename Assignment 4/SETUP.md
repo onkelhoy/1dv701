@@ -28,11 +28,17 @@ Each router interface (red dot in the topology) and Qemu node (green dots) will 
 When the IP scheme is ready, configure the routers using the following console commands:
 
 > conf t
+
 > int [router_interface] //For example, f0/0
+
 > ip address [your_ip] [your_mask]
+
 > bandwidth [your_bandwidth] //Find out what metric is used for bandwidth
+
 > no shutdown
+
 > end
+
 After that you should configure the Qemu nodes (X in ethX should be replaced with a number of used Qemu interface, e.g. eth0 for interface e0):
 
 ifconfig ethX [your_ip] netmask [your_mask] up 
@@ -42,6 +48,7 @@ If you face an error message about duplex mismatch, you may enter the following 
 > conf t
 > no cdp log mismatch duplex
 > end
+
 After configuration is done, try to ping the next hop from each of the network nodes (only the next hop, not from R2 to R3 or C1 to R3). Once the pings are successful, your network topology is ready for the assignment.
 
 ## Saving/Loading a configuration
