@@ -1,3 +1,4 @@
+[Go Back][1]
 # Network setup guidelines
 ### Required downloads
 - GNS3
@@ -58,3 +59,6 @@ After configuration is done, try to ping the next hop from each of the network n
 At the beginning of each problem of this assignment, you will need to return to the basic state of configuration on each router (not required for computers C1 and C2). Therefore, you need to first save the configuration of each router by issuing the wr mem console command. Then, in GNS3 click *File->Import/Export* and export all configurations to a folder at your PC. Mind that rebooting GNS3 will erase the settings of computers C1 and C2. When you need to return to the basic configuration, stop all of your router instances, click *File->Import/Export* and import a previously saved configuration to the routers.
 
 **Hint**: all router configurations can be saved in a *.txt* document and simply copied in the router console with shift+insert. 
+[Go Back][1]
+
+[1]: README.md

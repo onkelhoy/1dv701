@@ -20,17 +20,24 @@ Configure a network virtual environment and create a required topology according
 
 In this problem you will work with static routing. Choose one of the three available routing passes between C1 and C2 that is more efficient in your opinion. Then implement static routing using this pass. To add one route to a router, use the following commands:
 
-enable
-conf t
-ip route [ip] [mask] [router_interface] [metric]
-end
+> enable
+
+> conf t
+
+> ip route [ip] [mask] [router_interface] [metric]
+
+> end
+
 Explain each of the parameters of the ip route command in your report. When a complete route between Qemu nodes is ready, send ping commands from C1 to C2 in order to test the connection. Include resulting screenshot and explain the choice of a routing pass in your report.
 
 Start a continuous ping from C1 to C2. Then shut down one of the active router interfaces along the path connecting C1 and C2:
 
-conf t
-int [router_interface]
-shut
+> conf t
+
+> int [router_interface]
+
+> shut
+
 Observe that pings are failing. Your task now is to configure the remaining two routing passes between C1 and C2. Once finished, start a continuous ping from C1 to C2 again and shut down one of the active router interfaces. Observe how many packets are lost before a new routing pass starts working and include a screenshot in your report. Hint: how do you know that a routing pass changed?
 
 VG-task 1: Add a new /24 network to R4. To do that, use a loopback interface. Ping the new network from C1 and include a resulting screenshots in your report. Repeat this scenario in problem 3, include a screenshot.
