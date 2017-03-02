@@ -46,7 +46,9 @@ route add default gw [ip] ethX //find out the meaning of this command to insert 
 If you face an error message about duplex mismatch, you may enter the following in the router config:
 
 > conf t
+
 > no cdp log mismatch duplex
+
 > end
 
 After configuration is done, try to ping the next hop from each of the network nodes (only the next hop, not from R2 to R3 or C1 to R3). Once the pings are successful, your network topology is ready for the assignment.
