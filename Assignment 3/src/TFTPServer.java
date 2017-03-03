@@ -1,4 +1,5 @@
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -88,13 +89,13 @@ public class TFTPServer
 						if (reqtype == OP_RRQ) 
 						{      
 							requestedFile.insert(0, READDIR);
-							HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
+							HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ, clientAddress.getPort());
 						}
 						// Write request
 						else 
 						{                       
 							requestedFile.insert(0, WRITEDIR);
-							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
+							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ, clientAddress.getPort());  
 						}
 						sendSocket.close();
 					} 
@@ -139,17 +140,29 @@ public class TFTPServer
 	{
 		// See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
 		
-		int opcode = ((buf[0] & 0xff << 8) | (buf[1] & 0xff));
+		int opcode = (buf[0] << 8) | (buf[1] & 0x00ff);
 		
 		if(opcode == 1 || opcode == 2) {
-			int index = 2;
-			while((int)buf[index] > 0){
-				requestedFile.append((char)buf[index]);
-				index++;
-			}
+			// 2bytes 	Nbytes	 1byte Nbytes 0byte
+			// opcode | filename | 0 | mode | 0 
+			int index = filldata(2, buf, requestedFile);
+			StringBuffer mode = new StringBuffer();
+			filldata(index, buf, mode); //fill the mode
+			
+			if(!mode.toString().toLowerCase().equals("octet")) return -1; // will produce an illegal error stmt.
 		}
 		
 		return opcode;
+	}
+	
+	private int filldata(int index, byte[] buf, StringBuffer fill){
+		char c;
+		while((c = (char)buf[index]) != 0){
+			fill.append(c);
+			index++;
+		}
+		
+		return ++index; //skip the zero
 	}
 
 	/**
@@ -161,66 +174,127 @@ public class TFTPServer
 	 * @throws IOException 
 	 */
 	
-	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) throws IOException 
-	{		
-		if(opcode == OP_RRQ)
-		{
-			File f = new File(requestedFile);
-			if(!(f.exists() && f.isFile())) {
-				send_ERR(sendSocket, 1, "File not found.");
+	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode, int port) throws IOException 
+	{	
+		String ip = sendSocket.getLocalAddress().getHostAddress();
+		
+		File f = new File(requestedFile);
+
+		String abspath = new File(READDIR).getAbsolutePath();
+		String canonicalPath = f.getCanonicalPath();
+		
+		if(!canonicalPath.startsWith(abspath)) { // its a file, check parent
+			send_ERR(sendSocket, 2, "Access violation");
+			return;
+		}
+		else if(canonicalPath.startsWith(abspath+"\\admin")){
+			if(!ip.equals("1.3.3.7")){ // only the admin which has this ip has permission for this folder!!
+				send_ERR(sendSocket, 7, "No Such User");
 				return;
 			}
+		}
+		
+		
+		if(opcode == OP_RRQ)
+		{
+			
+			if(!(f.exists() && f.isFile())) {
+				send_ERR(sendSocket, 1, "File not found."); // file not found
+				return;
+			} // dir/../a.txt -> a.txt
+			
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 			byte[] databuffer = Files.readAllBytes(Paths.get(requestedFile)); // read in data from file
 			
-			int block = 1, count = databuffer.length/512, error = 0;
+			int block = 1, count = (databuffer.length/512)+1, error = 0;
 			byte[] buffer = getSendData(block, databuffer); // initial buffer
 			
-			while(block <= count+1) {
+			while(block <= count) {
 				if(error > 3) { // max errors of 3 in this case
-					System.out.println("Too many errors (send a error back!)");
-					break;
+					send_ERR(sendSocket, 0, "too many errors");
+					
+					return;
 				}
 				
-				if(send_DATA_receive_ACK(sendSocket, 1000, buffer)) {
-					block++;
-					error = 0;
-					if(block <= count+1) buffer = getSendData(block, databuffer); // don't re-create if fail
+				int ackblock = send_DATA_receive_ACK(sendSocket, 1000, buffer, port);
+				
+				if(ackblock > 0) {
+					if(ackblock == block){ // check if the acknowledgment block is the same as our block
+						block++;
+						error = 0;
+						if(block <= count) buffer = getSendData(block, databuffer); 
+					}
+					else { // oh no.. the client is behind and wants the new ackblock that he/she missed
+						if(ackblock+1 <= count) buffer = getSendData(ackblock+1, databuffer);
+						error++;
+					}
+				}
+				else if(ackblock == -2){
+					send_ERR(sendSocket, 5, "Unknown transfer ID."); // error code 5
+					return;
 				}
 				else error++;
 			}
-			
 		}
 		else if (opcode == OP_WRQ) 
-		{
+		{	
+			if(f.exists() && f.isFile()) {
+				send_ERR(sendSocket, 6, "File already exists."); // error code 6
+				return;
+			}
+			
 			FileOutputStream writer = new FileOutputStream(requestedFile);
+			ByteArrayOutputStream outputStream = new ByteArrayOutputStream( );
 			int block = 0, error = 0;
 			byte[] ack = getHead(4, OP_ACK, block);
 			
+			int total = 0;
 			
-			//send the initial ACK [0]
-			sendSocket.send(new DatagramPacket(ack, ack.length));
-			ack = getHead(4, OP_ACK, ++block); // and get the new ACK
 			
-			while(!sendSocket.isClosed()){
+			while(true){
 				if(error >= 3) { // maybe
-					System.out.println("error is more then 3");
-					break;
+				send_ERR(sendSocket, 0, "too many errors [WRQ]");
+					System.out.println("too many errors");
+					return;
 				}
-				if(receive_DATA_send_ACK(sendSocket, ack, writer)) {
+				int readbytes = 0;
+				if((readbytes = receive_DATA_send_ACK(sendSocket, ack, outputStream, port)) >= 0) {
 					error = 0;
+					total += readbytes;
+					
+					if(total > 800000) {
+						// the file is exceeding 800kb 
+						send_ERR(sendSocket, 3, "Disk full or allocation exceeded."); // error code 3
+						return;
+					}
+					
 					ack = getHead(4, OP_ACK, ++block);
 				}
-				else error++;
+				else if(readbytes == -2){
+					send_ERR(sendSocket, 5, "Unknown transfer ID."); // error code 5
+					return;
+				}
+				else {
+					send_ERR(sendSocket, 0, "resend data"); // type 0 error
+					error++;
+				}
+				if(readbytes < 512 && readbytes != -1) break; //EoF
 			}
 			
-			writer.close();
+			if(error < 3) {
+				writer.write(outputStream.toByteArray());
+				writer.flush();
+				writer.close();
+				outputStream.close();
+				sendSocket.send(new DatagramPacket(ack, ack.length));
+				return;
+			}
 		}
 		else 
 		{
 			System.err.println("Invalid request. Sending an error packet.");
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(sendSocket, 4, "Illegal TFTP operation.");
+			send_ERR(sendSocket, 4, "Illegal TFTP operation."); // type 4 error
 			return;
 		}		
 	}
@@ -244,7 +318,7 @@ public class TFTPServer
 		
 		return buffer;
 	}
-	private boolean send_DATA_receive_ACK(DatagramSocket socket, int timeout, byte[] buffer){
+	private int send_DATA_receive_ACK(DatagramSocket socket, int timeout, byte[] buffer, int port){
 		DatagramPacket datagram = new DatagramPacket(buffer, buffer.length); // the datagram to be sent
 		try {
 			socket.send(datagram); // send the datagram
@@ -252,17 +326,22 @@ public class TFTPServer
 
 			socket.setSoTimeout(timeout); // the timeout limit
 			try {
-				socket.receive(new DatagramPacket(recive, recive.length)); // get the ACK packet
-				int opcode = ((recive[0] & 0xff << 8) | (recive[1] & 0xff)); // retrive the opcode
-				if(opcode == OP_ACK) return true; // hope for the best
-				else return false; // oh no.. it failed
+				DatagramPacket db = new DatagramPacket(recive, recive.length);
+				socket.receive(db); // get the ACK packet
+				
+				if(db.getPort() != port) return -2;
+				
+				
+				int opcode = ParseRQ(recive, null); // retrive the opcode
+				if(opcode == OP_ACK) return ((recive[2] << 8) | (recive[3] & 0x00ff)); // send the block number
+				else return -1; // oh no.. it failed
 			}
 			catch (SocketTimeoutException te){ //oh shit.. the timeout for the recive expired
 				//timeout.. resend
-				return false;
+				return -1;
 			}
 		} catch (IOException e) { // an internal error occured
-			return false;
+			return -1;
 		}
 	}
 	
@@ -275,14 +354,17 @@ public class TFTPServer
 		head.putShort((short)block);
 		return head.array();
 	}
-	private boolean receive_DATA_send_ACK(DatagramSocket socket, byte[] ack, FileOutputStream writer)
+	private int receive_DATA_send_ACK(DatagramSocket socket, byte[] ack, ByteArrayOutputStream writer, int port)
 	{
 		try {		
 			// read in data
+			socket.send(new DatagramPacket(ack, ack.length));
 			socket.setSoTimeout(6000); // timeout
 			byte[] buffer = new byte[512+4];
 			DatagramPacket datagram = new DatagramPacket(buffer, buffer.length);
 			socket.receive(datagram);
+			
+			if(datagram.getPort() != port) return -2;
 			
 			// check opcode = 4
 			if(ParseRQ(buffer, new StringBuffer()) == OP_DAT) {
@@ -292,14 +374,13 @@ public class TFTPServer
 				
 				writer.write(data);
 				writer.flush();
-				socket.send(new DatagramPacket(ack, ack.length));
-				if(data.length < 512) socket.close();
-				return true;
+				//if(data.length < 512) socket.close();
+				return data.length;
 			}
-			else return false;
+			else return -1;
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
-			return false;
+			return -1;
 		}
 	}
 	

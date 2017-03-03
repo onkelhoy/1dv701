@@ -1,0 +1,73 @@
+autostart = False
+version = 0.8.6
+[qemu 127.0.0.1:10525]
+    workingdir = qemu-flash-drives
+    udp = 40000
+    qemupath = qemu.exe
+    qemuimgpath = qemu-img.exe
+    [[QemuDevice]]
+        image = D:\Document\Skola\1DV701\Assignment 4\downloads\linux-microcore-4.0.2-clean.img
+        ram = 128
+        netcard = e1000
+    [[QEMU C2]]
+        x = 283.5
+        y = -26.5
+        z = 1.0
+    [[QEMU C1]]
+        x = -385.5
+        y = -24.5
+        z = 1.0
+        hx = 17.5
+        hy = -30.0
+[127.0.0.1:7200]
+    workingdir = C:\Users\henry\AppData\Local\Temp
+    udp = 10001
+    [[3725]]
+        image = D:\Document\Skola\1DV701\Assignment 4\downloads\c3725-advipservicesk9-mz.124-15.T6.image
+        ram = 128
+        idlepc = 0x60ba4e80
+        sparsemem = True
+        ghostios = True
+    [[ROUTER R4]]
+        model = 3725
+        console = 2105
+        aux = 2505
+        wic0/0 = WIC-1T
+        cnfg = configs\R4.cfg
+        x = 97.0
+        y = -22.0
+        z = 1.0
+        hx = 9.0
+        hy = -30.0
+    [[ROUTER R1]]
+        model = 3725
+        console = 2101
+        aux = 2501
+        slot1 = NM-1FE-TX
+        cnfg = configs\R1.cfg
+        x = -199.0
+        y = -18.0
+        z = 1.0
+        hx = 10.0
+        hy = -31.0
+    [[ROUTER R2]]
+        model = 3725
+        console = 2103
+        aux = 2503
+        cnfg = configs\R2.cfg
+        x = -51.0
+        y = -169.0
+        z = 1.0
+        hx = 12.0
+        hy = -31.0
+    [[ROUTER R3]]
+        model = 3725
+        console = 2104
+        aux = 2504
+        wic0/0 = WIC-1T
+        cnfg = configs\R3.cfg
+        x = -48.0
+        y = 113.0
+        z = 1.0
+[GNS3-DATA]
+    configs = configs

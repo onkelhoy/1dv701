@@ -1,4 +1,4 @@
-# The Standard TFTP Client
+﻿# The Standard TFTP Client
 
 In this assignment we will use the TFTP client supported by the operating system to contact the server we are about to implement. In the following session we show how to use the client to fetch a file (RFC1350.txt) from a TFTP server on a remote machine. The port we use here is the default TFTP port (69), and it should be changed to the actual port the server listens to. Unix systems provide a client operating in interactive mode:
 
@@ -12,7 +12,7 @@ It is as easy as it looks. After we have started the client program, we define t
 
 If you use Windows, the standard TFTP client lacks such an important option as server port selection. Therefore, we suggest using TFTPD32 application which provides TFTP client (as well as server) implementation with number of options.
 
-- [ ] Problem 1
+- [x] Problem 1
 
 Your task in this assignment is to implement a TFTP server functionality according to RFC1350, the only relaxation being that your implementation is allowed to handle only one transfer mode (octet). A program like this should be developed step by step. In what follows we give a suggested working plan to help you complete the assignment. Try not to start solving the next problem before you have thoroughly tested the previous one.
 
@@ -46,7 +46,7 @@ It is now time for a crucial test: make a read request from the client (request 
 
 After successfully reading the requests, examine the TFTPServer starter code once more and explain in your report why we used both socket and sendSocket.
 
-- [ ] Problem 2
+- [x] Problem 2
 
 Add a functionality that makes it possible to handle files larger than 512 bytes. Include resulting screenshot with sending multiple large file in your report.
 
@@ -56,7 +56,7 @@ Once read requests work properly, implement the part that handles write requests
 
 VG-task 1: You must capture and analyze traffic between machines during a read request using Wireshark. Include resulting screenshots and explain the results in your report. The explanation should include a line-by-line analysis of what is displayed on the Wireshark screenshot including the contents of each packet. Finally, answer the following question: what is the difference between a read and a write request? Include a confirming Wireshark screenshot in your report.
 
-- [ ] Problem 3
+- [x] Problem 3
 
 Implement the TFTP error handling for error codes 0, 1, 2 and 6 (see RFC1350 specification). Include resulting screenshots with those exceptions in your report.
 
