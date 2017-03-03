@@ -5,3 +5,5 @@ write/*
 # but keep the actual folder
 !read/.gitkeep
 !write/.gitkeep
+!write/admin/
+!read/admin/
