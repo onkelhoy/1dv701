@@ -42,8 +42,10 @@ When the IP scheme is ready, configure the routers using the following console c
 
 After that you should configure the Qemu nodes (X in ethX should be replaced with a number of used Qemu interface, e.g. eth0 for interface e0):
 
-ifconfig ethX [your_ip] netmask [your_mask] up 
-route add default gw [ip] ethX //find out the meaning of this command to insert a correct [ip] address
+> ifconfig ethX [your_ip] netmask [your_mask] up 
+
+> route add default gw [ip] ethX //find out the meaning of this command to insert a correct [ip] address
+
 If you face an error message about duplex mismatch, you may enter the following in the router config:
 
 > conf t
